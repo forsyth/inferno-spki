@@ -1267,12 +1267,23 @@ readkeys(keyfile: string)
         length := int d.length;
         if(length == 0)
                 return;
+        if(length < AESbsize + Checklen)
+                corrupt(keyfile);
 
         buf := array[length] of byte;
         if(sys->read(fd, buf, len buf) != len buf)
                 fatal(sys->sprint("can't read %s: %r", keyfile));
 
-        for(i := 0; i < length;) {
+        state := kr->aessetup(thekey, buf[0:AESbsize]);
+        if(state == nil)
+                fatal("can't initialize AES");
+
+        kr->aescbc(state, buf[AESbsize:], length - AESbsize, Keyring->Decrypt);
+        if(string buf[length - Checklen:] != Checkpat)
+                corrupt(keyfile);
+
+        length -= Checklen;
+        for(i := AESbsize; i < length;) {
                 (k, n) := unpack(buf[i:]);
                 if(k == nil)
                         corrupt(keyfile);
@@ -1296,8 +1307,12 @@ writekeys(keyfile: string)
                 return;
         }
 
+        length += AESbsize + Checklen;
         buf := array[length] of byte;
-        j := 0;
+        for(i = 0; i < AESbsize; i++)
+                buf[i] = byte rand->rand(256);
+
+        j := AESbsize;
         for(i = 0; i < len keys; i++) {
                 if((k := keys[i]) != nil) {
                         a := pack(k);
@@ -1305,6 +1320,13 @@ writekeys(keyfile: string)
                         j += len a;
                 }
         }
+
+        buf[length - Checklen:] = array of byte Checkpat;
+        state := kr->aessetup(thekey, buf[0:AESbsize]);
+        if(state == nil)
+                fatal("can't initialize AES");
+
+        kr->aescbc(state, buf[AESbsize:], length - AESbsize, Keyring->Encrypt);
 
         fd := sys->create(keyfile, Sys->OWRITE, 8r600);
         if(fd == nil)
