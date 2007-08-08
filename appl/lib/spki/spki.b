@@ -1023,15 +1023,18 @@ Key.hashexp(key: self ref Key, alg: string): ref Hash
 
 Key.sigalg(k: self ref Key): string
 {
-	if(k.pk == nil || k.pk.sa == nil)
+	if(k.pk != nil)
+		alg := k.pk.sa.name;
+	else if(k.sk != nil)
+		alg = k.sk.sa.name;
+	else
 		return nil;
-	halg := "";
-	if(k.halg != nil)
-		halg = "-"+k.halg;
-	n := k.pk.sa.name;
-	if(n == "rsa" || n == "dsa")
-		return n+"-pkcs1"+halg;
-	return n+halg;
+	if(k.halg != nil){
+		if(k.henc != nil)
+			alg += "-"+k.henc;
+		alg += "-"+k.halg;
+	}
+	return alg;
 }
 
 Key.text(k: self ref Key): string
@@ -2064,7 +2067,7 @@ Keyrep.pk(pk: ref Keyring->PK): ref Keyrep.PK
 	case hd flds {
 	"rsa" =>
 		return ref Keyrep.PK(hd flds, hd tl flds,
-			keyextract(tl tl flds, list of {("e",1), ("n",0)}));
+			keyextract(tl tl flds, list of {("ek",1), ("n",0)}));
 	"elgamal" or "dsa" =>
 		return ref Keyrep.PK(hd flds, hd tl flds,
 			keyextract(tl tl flds, list of {("p",0), ("alpha",1), ("key",2)}));
@@ -2079,10 +2082,11 @@ Keyrep.sk(pk: ref Keyring->SK): ref Keyrep.SK
 	(nf, flds) := sys->tokenize(s, "\n");
 	if((nf -= 2) < 0)
 		return nil;
+	# the ordering of components below should match the one defined in the spki spec
 	case hd flds {
 	"rsa" =>
 		return ref Keyrep.SK(hd flds, hd tl flds,
-			keyextract(tl tl flds,list of {("e",1), ("n",0), ("!dk",2), ("!p",3), ("!q",4), ("!kp",5), ("!kq",6), ("!c2",7)}));
+			keyextract(tl tl flds,list of {("ek",1), ("n",0), ("!dk",2), ("!q",4), ("!p",3), ("!kq",6), ("!kp",5), ("!c2",7)}));	# see comment elsewhere about p, q
 	"elgamal" or "dsa" =>
 		return ref Keyrep.SK(hd flds, hd tl flds,
 			keyextract(tl tl flds, list of {("p",0), ("alpha",1), ("key",2), ("!secret",3)}));
@@ -2112,7 +2116,7 @@ Keyrep.mkpk(k: self ref Keyrep): (ref Keyring->PK, int)
 {
 	case k.alg {
 	"rsa" =>
-		e := k.get("e");
+		e := k.get("ek");
 		n := k.get("n");
 		if(e == nil || n == nil)
 			return (nil, 0);
@@ -2126,7 +2130,7 @@ Keyrep.mksk(k: self ref Keyrep): ref Keyring->SK
 {
 	case k.alg {
 	"rsa" =>
-		e := k.get("e");
+		e := k.get("ek");
 		n := k.get("n");
 		dk := k.get("!dk");
 		p := k.get("!p");
@@ -2151,6 +2155,7 @@ Keyrep.mksk(k: self ref Keyrep): ref Keyring->SK
 s2f(s: string): string
 {
 	case s {
+	"e" => return "ek";
 	"d" => return "!dk";
 	"p" => return "!q";		# NB: p and q (kp and kq) roles are reversed between libsec and pkcs
 	"q" => return "!p";
@@ -2164,6 +2169,7 @@ s2f(s: string): string
 f2s(s: string): string
 {
 	case s {
+	"ek" =>	return "e";
 	"!p" =>	return "q";	# see above
 	"!q" =>	return "p";
 	"!dk" =>	return "d";

@@ -2,6 +2,7 @@
 
 TARG=\
 	keyfs.dis\
+	keygen.dis\
 	sign.dis\
 	verify.dis\
 
