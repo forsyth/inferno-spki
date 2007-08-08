@@ -81,19 +81,13 @@ init(nil: ref Draw->Context, args: list of string)
 	(ka, enc, ha) := algs(alg);
 	if(ka == nil)
 		error("invalid algorithm spec: "+alg);
-	sk: ref Keyring->SK;
-	{
-		sk = kr->genSK(ka, ".", nbits);
-		if(sk == nil)
-			error("unable to generate key");
-	}exception e{
-	"*"=>
-		error("unable to generate key: "+e);
-	}
+	sk := kr->genSK(ka, ".", nbits);
+	if(sk == nil)
+		error("unable to generate key: probably unknown algorithm: "+alg);
 	if(ha == nil)
 		ha = "sha1";
 	if(ka == "rsa" && enc == nil)
-		enc = "pkcs1";	# it's recommended
+		enc = "pkcs1";	# it's recommended for RSA
 	key := ref Key(kr->sktopk(sk), sk, nbits, ha, enc, nil);
 	prexp(key.sexp(), transport);
 	if(!secretonly){
