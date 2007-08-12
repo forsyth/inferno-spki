@@ -20,7 +20,7 @@ keyfs \- encrypted storage of SPKI keys and certificates
 serves a namespace for storing SPKI keys and certificates. This data is stored in
 .I keyfile
 (default:
-.BR keys),
+.BR /keydb/spki),
 encrypted by a master key using AES
 (see
 .IR keyring-crypt (2)).
