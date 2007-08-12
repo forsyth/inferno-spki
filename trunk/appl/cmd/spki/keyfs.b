@@ -179,7 +179,7 @@ init(nil: ref Draw->Context, args: list of string)
         arg->init(args);
         arg->setusage("keyfs [-m mntpt] [-D] [-n nvramfile] [keyfile]");
         mountpt := "/mnt/keys";
-        keyfile := "./keys";
+        keyfile := "/keydb/spki";
         nvram: string;
         while((o := arg->opt()) != 0)
                 case o {
