@@ -1,10 +1,10 @@
-.TH VERIFY 4
+.TH VERIFYFS 4
 .SH NAME
-verify - a verifier for SPKI proof sequences
+verifyfs - a verifier for SPKI proof sequences
 .SH SYNOPSIS
-.B spki/verify
+.B spki/verifyfs
 .SH DESCRIPTION
-.I Verify
+.I Verifyfs
 serves a single file (default:
 .BR /mnt/spki/verify),
 which accepts SPKI proof sequences in the form of a list of S-expressions
@@ -13,7 +13,7 @@ file, it attempts to verify it. If the sequence is valid, an Inferno certificate
 can then be read from the file which can be used to access Inferno services. If
 an error occurs, the write fails and the error is returned to the user.
 .SH SOURCE
-.B /appl/cmd/spki/verify.b
+.B /appl/cmd/spki/verifyfs.b
 .SH SEE ALSO
 .IR spki (2)
 .IR sexprs (2)

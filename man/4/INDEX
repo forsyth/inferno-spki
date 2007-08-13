@@ -30,4 +30,4 @@ spki-keyfs spki-keyfs
 spree spree
 tarfs tarfs
 trfs trfs
-verify verify
+verifyfs verifyfs
