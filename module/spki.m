@@ -117,7 +117,7 @@ SPKI: module
 	Signature: adt {
 		hash:	ref Hash;
 		key:	ref Key;	# find by hash if necessary
-		sa:	string;
+		sa:	string;	# alg[-[encoding-]hash]
 		sig:	list of (string, array of byte);
 
 		algs:	fn(s: self ref Signature): (string, string, string);
@@ -215,6 +215,9 @@ SPKI: module
 	epoch2date:	fn(t: int): string;
 	time2secs:	fn(s: string): int;	# HH:MM:SS
 	secs2time:	fn(t: int): string;
+
+	# misc
+	sigalgs:	fn(algs: string): (string, string, string);
 
 	# debugging
 	dump:	fn(s: string, a: array of byte);

@@ -602,7 +602,7 @@ signbytes(data: array of byte, sigalg: string, key: ref Key): (ref Signature, st
 	pubkey := ref *key;
 	pubkey.sk = nil;
 	sig := ref Signature(nil, pubkey, sigalg, nil);	# ref Hash, key, alg, sig: list of (string, array of byte)
-	(alg, enc, hashalg) := sig.algs();
+	(alg, enc, hashalg) := sigalgs(sigalg);
 	if(alg == nil)
 		return (nil, "unspecified signature algorithm");
 	if(hashalg == nil)
@@ -682,7 +682,13 @@ dump(s: string, a: array of byte)
 
 Signature.algs(sg: self ref Signature): (string, string, string)
 {
-	(nf, flds) := sys->tokenize(sg.sa, "-");
+	return sigalgs(sg.sa);
+}
+
+# sig[-[enc-]hash]
+sigalgs(alg: string): (string, string, string)
+{
+	(nf, flds) := sys->tokenize(alg, "-");
 	if(nf >= 3)
 		return (hd flds, hd tl flds, hd tl tl flds);
 	if(nf >= 2)
