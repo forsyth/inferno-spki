@@ -4,6 +4,7 @@ TARG=\
 	keyfs.dis\
 	keygen.dis\
 	sign.dis\
+	speaksfor.dis\
 	verify.dis\
 
 SYSMODULES=\
