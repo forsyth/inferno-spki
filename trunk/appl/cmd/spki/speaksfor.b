@@ -38,7 +38,7 @@ init(nit: ref Draw->Context, args: list of string)
 	arg := load Arg Arg->PATH;
 	arg->init(args);
 	arg->setusage("speaksfor [-k] -s subject -i issuer [-t tag] [-v valid]" 
-			+ "[-p print cert] [-m keyfs mount point] keyfile");
+			+ " [-p print cert] [-m keyfs mount point]");
 	mountpoint := "/mnt/keys";
 	certname: string = nil;
 	subjectname: string = nil;
@@ -58,7 +58,7 @@ init(nit: ref Draw->Context, args: list of string)
 		'm' =>
 			mountpoint = arg->earg();
 		'p' =>
-			printcert := 1;
+			printcert = 1;
 		's' =>
 			subjectname = arg->earg();
 		't' =>
@@ -76,40 +76,52 @@ init(nit: ref Draw->Context, args: list of string)
 		certname = subjectname;
 	
 	args = arg->argv();
-	if(args == nil)
-		arg->usage();
-	keyorfile := hd args;
-	args = tl args;
 	if(args != nil)
 		arg->usage();
-	arg = nil;
 
 	sexprs->init();
 	spki->init();
 
 	# Read public and private keys of I
 	ikey: ref Key;
+	keyfile := issuername;
 	if(infkey){
-		x := kr->readauthinfo(keyorfile);
+		x := kr->readauthinfo(keyfile);
 		if(x == nil)
-			error(sys->sprint("can't read authinfo from %s: %r", keyorfile));
+			error(sys->sprint("can't read authinfo from %s: %r", keyfile));
 		ikey = ref Key(x.mypk, x.mysk, 512, "md5", "pkcs1", nil);
 	}
 	else {
-		ekey := readexpfile(keyorfile);
-		ikey = spki->parsekey(ekey);
+		# keyfile must contain two S-expressions for the public and private keys
+		keylist := readexpfile(keyfile);
+		if(keylist == nil)
+			error(sys->sprint("can't read key file %s", keyfile));
+
+		ikey = spki->parsekey(hd keylist);
 		if(ikey == nil)
-			error(sys->sprint("can't parse key %s", keyorfile));
+			error(sys->sprint("can't parse key %s", keyfile));
+
+		keylist = tl keylist;
+		ikeytmp := spki->parsekey(hd keylist);
+		if(ikeytmp == nil)
+			error(sys->sprint("can't parse key %s", keyfile));
+
+		if(ikeytmp.pk != nil)
+			ikey.pk = ikeytmp.pk;
+		if(ikeytmp.sk != nil)
+			ikey.sk = ikeytmp.sk;
 	}
 
 	# Read public key of S
-	spkexp := readexpfile(mountpoint + "/pk/" + subjectname + "/pubkey");
+	spkexp := (hd readexpfile(mountpoint + "/pk/" + subjectname + "/pubkey"));
 	
 	# Construct certificate
-	valid := ref Valid("0", "0");
+	valid: ref Valid;
 	tag := ref Sexp.String(tagstr, nil);
 	issuer := ref Name(ikey, nil);
 	subject := ref Subject.P(spki->parsekey(spkexp));
+	if(subject.key == nil)
+		error(sys->sprint("can't get subject's public key from file"));
 	cert := ref Cert.A(nil, issuer, subject, valid, 1, tag);
 
 	# Make signature
@@ -146,15 +158,22 @@ writefile(name: string, s: string)
 	return;
 }
 
-readexpfile(name: string): ref Sexp
+readexpfile(name: string): list of ref Sexp
 {
 	fd := bufio->open(name, Bufio->OREAD);
 	if(fd == nil)
 		error(sys->sprint("can't open %s: %r", name));
 
-	(exp, err) := Sexp.read(fd);
-	if(err != nil)
-		error(sys->sprint("invalid s-expression: %s", err));
+	exp: ref Sexp;
+	err: string;
+	explist: list of ref Sexp;
+	do {
+		(exp, err) = Sexp.read(fd);
+		if(err != nil)
+			error(sys->sprint("invalid s-expression: %s", err));
+		if(exp != nil)
+			explist = exp :: explist;
+	} while(exp != nil);
 
-	return exp;
+	return explist;
 }
