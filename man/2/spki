@@ -115,8 +115,8 @@ Seqel: adt {
 };
 
 Valid: adt {
-    notbefore:  int;
-    notafter:   int;
+    notbefore:  string;
+    notafter:   string;
 
     intersect:  fn(a: self Valid, b: Valid): (int, Valid);
     text:   fn(a: self Valid): string;
