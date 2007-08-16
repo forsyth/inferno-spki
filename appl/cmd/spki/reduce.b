@@ -33,6 +33,8 @@ include "encoding.m";
 	base16: Encoding;
 	base64: Encoding;
 
+include "arg.m";
+
 Reduce: module
 {
 	init:	fn(nil: ref Draw->Context, nil: list of string);
@@ -53,22 +55,23 @@ Proof: adt {
 	eq:	fn(p1: self ref Proof, p2: ref Proof): int;
 };
 
-fakes := array[] of {
-	("Kbob",	"(hash md5 |NiF6NeWT7tb37lIOUqyB+w==|)"),
-	("Kcarol", "(hash md5 |s1HKHFRG+5bHhyaNNp6d7A==|)"),
-	("Kted", "(hash md5 |CN+dKlLqGOki4JPv2cIHNg==|)"),
-	("Kalice", "(hash md5 |ZZ9InMix6zy6PqiiT4cZdQ==|)"),
-	("Kfrank", "(hash md5 |BB+0t+SG0lXN8qGVkAoAqw==|)")
-};
+mountpoint: string;	# keyfs mountpoint
 
-lookfake(n: string): string
+lookkey(n: string): string
 {
-	for(i := 0; i < len fakes; i++){
-		(name, key) := fakes[i];
-		if(name == n)
-			return key;
+	fd := bufio->open(mountpoint + "/pk/" + n + "/pubkey", Bufio->OREAD);
+	if(fd == nil) {
+		sys->fprint(sys->fildes(2), "can't open %s: %r\n", n);
+		return nil;
 	}
-	return nil;
+
+	(exp, err) := Sexp.read(fd);
+	if(err != nil) {
+		sys->fprint(sys->fildes(2), "invalid s-expression: %s\n", err);
+		return nil;
+	}
+
+	return exp.text();
 }
 
 init(nil: ref Draw->Context, args: list of string)
@@ -80,9 +83,22 @@ init(nil: ref Draw->Context, args: list of string)
 	spki = load SPKI SPKI->PATH;
 	base16 = load Encoding Encoding->BASE16PATH;
 	base64 = load Encoding Encoding->BASE64PATH;
+	arg := load Arg Arg->PATH;
 
 	spki->init();
 	sexprs->init();
+	arg->init(args);
+
+	arg->setusage("reduce [-m keyfs mount point]");
+	mountpoint = "/mnt/keys";
+	while((o := arg->opt()) != 0)
+		case o {
+		'm' =>
+			mountpoint = arg->earg();
+		* =>
+			arg->usage();
+		}
+
 	f := bufio->fopen(sys->fildes(0), Sys->OREAD);
 	while((line := f.gets('\n')) != nil){
 		(nf, flds) := sys->tokenize(line, "\n \t");
@@ -92,7 +108,7 @@ init(nil: ref Draw->Context, args: list of string)
 			flds = tl flds;
 			if(flds == nil)
 				continue;
-			k0 := lookfake(hd flds);
+			k0 := lookkey(hd flds);
 			if(k0 == nil){
 				sys->print("%s: unknown name\n", k0);
 				continue;
@@ -121,7 +137,7 @@ init(nil: ref Draw->Context, args: list of string)
 		}
 		n0 := 0;
 		n1 := 0;
-		k0 := lookfake(hd flds);
+		k0 := lookkey(hd flds);
 		if(k0 == nil){
 			sys->print("%s: unknown name\n", k0);
 			continue;
@@ -135,7 +151,7 @@ init(nil: ref Draw->Context, args: list of string)
 			sys->print("%s: bad entry\n", line);
 			continue;
 		}
-		k1 := lookfake(hd l);
+		k1 := lookkey(hd l);
 		if(k1 == nil){
 			sys->print("%s: unknown name\n", k1);
 			continue;
@@ -465,7 +481,7 @@ sys->print("Key\n");
 	for(ul := uniquekeys; ul != nil; ul = tl ul)
 		if(k.eq(hd ul))
 			return hd ul;
-	k.hashed("md5");
+	k.hashexp("md5");
 if(k.hash == nil)sys->print("FAILED\n"); else sys->print("HASHED\n");
 	uniquekeys = k :: uniquekeys;
 	return k;
