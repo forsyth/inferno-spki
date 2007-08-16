@@ -117,7 +117,9 @@ init(nit: ref Draw->Context, args: list of string)
 	
 	# Construct certificate
 	valid: ref Valid;
-	tag := ref Sexp.String(tagstr, nil);
+	(tag, nil, e) := Sexp.parse("(tag (" + tagstr + "))");
+	if(e != nil)
+		error(sys->sprint("invalid s-expression %q: %s", tagstr, e));
 	issuer := ref Name(ikey, nil);
 	subject := ref Subject.P(spki->parsekey(spkexp));
 	if(subject.key == nil)
