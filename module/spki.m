@@ -46,6 +46,8 @@ SPKI: module
 
 		hashed:	fn(k: self ref Key, alg: string): array of byte;
 		hashexp:	fn(k: self ref Key, alg: string): ref Hash;
+		ishash:	fn(k: self ref Key): int;
+		public:	fn(k: self ref Key): ref Key;
 		sigalg:	fn(k: self ref Key): string;
 		text:	fn(k: self ref Key): string;
 		sexp:	fn(k: self ref Key): ref Sexprs->Sexp;
