@@ -28,6 +28,7 @@ Key: adt {
 
     hashed:  fn(k: self ref Key, alg: string): array of byte;
     hashexp: fn(k: self ref Key, alg: string): ref Hash;
+    public:  fn(k: self ref Key): ref Key;
     sigalg:  fn(k: self ref Key): string;
     text:    fn(k: self ref Key): string;
     sexp:    fn(k: self ref Key): ref Sexprs->Sexp;
@@ -268,6 +269,49 @@ value can be created from an S-expression representing a SPKI
 element by
 .BR parsekey .
 It returns nil if the S-expression was ill-formed.
+For a given
+.B Key
+.IR k :
+.TP
+.IB k .ishash()
+Returns true if
+.I k
+is just a hash of a key, with no public or private components.
+.TP
+.IB k .public()
+Returns the public key for
+.IR k ,
+which is simply
+.I k
+if it is already a public key, but if it
+is a private key, then a new key is returned
+that has only public components.
+.B Public
+returns a nil value if
+.I k
+is just a hash of a key value.
+.TP
+.IB k .sigalg()
+Returns the SPKI signature algorithm for the key.
+.TP
+.IB k .hashed( alg )
+Return an array of bytes giving the hash of the Key
+.I k
+using algorithm
+.IR alg .
+It returns nil if
+.IB k .ishash()
+is true, and
+.I k
+has no associated hash value for
+.IR alg .
+.TP
+.IB k .hashexp( alg )
+Similar to
+.BR hashed ,
+but returns a
+.B Hash
+value instead of the raw data.
 .PP
 .B Name
 represents both local and extended names, and simple principals consisting of just a key.

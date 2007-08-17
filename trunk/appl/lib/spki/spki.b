@@ -1002,6 +1002,25 @@ Name.eq(a: self ref Name, b: ref Name): int
 	return nb == nil;
 }
 
+Key.public(key: self ref Key): ref Key
+{
+	if(key.sk != nil){
+		pk := ref *key;
+		if(pk.pk == nil)
+			pk.pk = kr->sktopk(pk.sk);
+		pk.sk = nil;
+		return pk;
+	}
+	if(key.pk == nil)
+		return nil;
+	return key;
+}
+
+Key.ishash(k: self ref Key): int
+{
+	return k.hash != nil && k.sk == nil && k.pk == nil;
+}
+
 Key.hashed(key: self ref Key, alg: string): array of byte
 {
 	e := key.sexp();
