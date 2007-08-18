@@ -86,9 +86,12 @@ init(ctxt: ref Draw->Context, args: list of string)
                 }
 	}
 
-	if(sys->create(mountpt, Sys->OREAD, Sys->DMDIR|8r777) == nil)
-		fatal(sys->sprint("Can't create %s directory: %r", mountpt));
-        if(sys->bind("#s", mountpt, Sys->MBEFORE) < 0)
+	(ok, d) := sys->stat(mountpt);
+	if(ok < 0) {
+		if(sys->create(mountpt, Sys->OREAD, Sys->DMDIR|8r775) == nil)
+			fatal(sys->sprint("Can't create %s directory: %r", mountpt));
+	}
+        if(sys->bind("#s", mountpt, Sys->MBEFORE|Sys->MCREATE) < 0)
                 fatal(sys->sprint("Can't bind #s on %s: %r", mountpt));
         fio := sys->file2chan(mountpt, "verify");
         if(fio == nil)
