@@ -59,7 +59,7 @@ mountpoint: string;	# keyfs mountpoint
 
 lookkey(n: string): string
 {
-	fd := bufio->open(mountpoint + "/pk/" + n + "/pubkey", Bufio->OREAD);
+	fd := bufio->open(mountpoint + "/pk/" + n + "/key", Bufio->OREAD);
 	if(fd == nil) {
 		sys->fprint(sys->fildes(2), "can't open %s: %r\n", n);
 		return nil;
