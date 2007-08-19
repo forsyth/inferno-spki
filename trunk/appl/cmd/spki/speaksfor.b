@@ -113,7 +113,7 @@ init(nit: ref Draw->Context, args: list of string)
 	}
 
 	# Read public key of S
-	spkexp := (hd readexpfile(mountpoint + "/pk/" + subjectname + "/pubkey"));
+	spkexp := (hd readexpfile(mountpoint + "/pk/" + subjectname + "/key"));
 	
 	# Construct certificate
 	valid: ref Valid;

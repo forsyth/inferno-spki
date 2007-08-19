@@ -73,12 +73,12 @@ Qroot, Qnew, Qpk, Qsk, Qcred, Qpkname, Qskname, Qcredname,
 	Qvalidity, Qsigned, Qpubkey, Qprivkey: con iota;
 
 pkfiles := array[] of {
-	(Qpubkey, "pubkey"),
+	(Qpubkey, "key"),
 	(Qalg, "alg")
 };
 
 skfiles := array[] of {
-	(Qprivkey, "privkey"),
+	(Qprivkey, "key"),
 	(Qalg, "alg")
 };
 
@@ -1006,14 +1006,18 @@ navigator(navops: chan of ref Navop)
 				}
 				n.reply <-= (nil, nil);
 			Qpk =>
-				for(j := dirslot(n.offset); --n.count >= 0 && j < len keys; j++)
-					if((k := keys[j]) != nil && k.pk != nil)
-						n.reply <-= dirgen(k.path & ~big 16r1F | big Qpkname, k.name, k);
+				if(n.offset == 0) {
+					for(j := dirslot(n.offset); --n.count >= 0 && j < len keys; j++)
+						if((k := keys[j]) != nil && k.pk != nil)
+							n.reply <-= dirgen(k.path & ~big 16r1F | big Qpkname, k.name, k);
+				}
 				n.reply <-= (nil, nil);
 			Qsk =>
-				for(j := dirslot(n.offset); --n.count >= 0 && j < len keys; j++)
-					if((k := keys[j]) != nil && k.sk != nil)
-						n.reply <-= dirgen(k.path & ~big 16r1F | big Qskname, k.name, k);
+				if(n.offset == 0) {
+					for(j := dirslot(n.offset); --n.count >= 0 && j < len keys; j++)
+						if((k := keys[j]) != nil && k.sk != nil)
+							n.reply <-= dirgen(k.path & ~big 16r1F | big Qskname, k.name, k);
+				}
 				n.reply <-= (nil, nil);
 			Qcred =>
 				for(j := dirslot(n.offset); --n.count >= 0 && j < len keys; j++)
