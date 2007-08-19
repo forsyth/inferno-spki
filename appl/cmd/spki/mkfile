@@ -3,9 +3,11 @@
 TARG=\
 	keyfs.dis\
 	keygen.dis\
+	reduce.dis\
 	sign.dis\
 	speaksfor.dis\
 	verify.dis\
+	verifyfs.dis\
 
 SYSMODULES=\
 	arg.m\

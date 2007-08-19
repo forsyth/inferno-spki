@@ -116,15 +116,16 @@ init(nit: ref Draw->Context, args: list of string)
 	spkexp := (hd readexpfile(mountpoint + "/pk/" + subjectname + "/key"));
 	
 	# Construct certificate
-	valid: ref Valid;
-	(tag, nil, e) := Sexp.parse("(tag (" + tagstr + "))");
-	if(e != nil)
-		error(sys->sprint("invalid s-expression %q: %s", tagstr, e));
+	valid := ref Valid("0", "0");
+	tag := ref Sexp.List(ref Sexp.String("tag", nil) :: 
+		ref Sexp.List(ref Sexp.String(tagstr, nil) :: nil) ::
+		nil);
 	issuer := ref Name(ikey, nil);
 	subject := ref Subject.P(spki->parsekey(spkexp));
 	if(subject.key == nil)
 		error(sys->sprint("can't get subject's public key from file"));
 	cert := ref Cert.A(nil, issuer, subject, valid, 1, tag);
+	cert.e = cert.sexp();
 
 	# Make signature
 	(sig, err) := spki->signcert(cert, "rsa-pkcs1-md5", ikey);
