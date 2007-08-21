@@ -65,7 +65,7 @@ Each directory in
 has the following files:
 .TF pk
 .TP
-.B pubkey
+.B key
 The public key, represented as an S-expression.
 .TP
 .B alg
@@ -77,7 +77,7 @@ Each directory in
 has the following files:
 .TF sk
 .TP
-.B privkey
+.B key
 The private key, represented as an S-expression.
 .TP
 .B alg

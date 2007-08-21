@@ -17,7 +17,7 @@ chain
 .SH DESCRIPTION
 .I Speaksfor
 constructs from the given arguments a SPKI certificate stating that S now speaks
-for I regarding T. This certificate is then signed with the isser's public key,
+for I regarding T. This certificate is then signed with the issuer's public key,
 and written to 
 .I keyfs 
 by default. If the
