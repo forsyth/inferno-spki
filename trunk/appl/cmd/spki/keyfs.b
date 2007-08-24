@@ -65,12 +65,13 @@ Spkikey: adt
 	pk:     ref Key;
 	sk:     ref Key;
 	cert:   ref Cert;
+	sig:	ref Signature;
 	path:   big;
 };
 
 Qroot, Qnew, Qpk, Qsk, Qcred, Qpkname, Qskname, Qcredname, 
 	Qalg, Qcert, Qissuer, Qsubject, Qtype, Qtag, Qtransport, 
-	Qvalidity, Qsigned, Qpubkey, Qprivkey: con iota;
+	Qvalidity, Qsigned, Qpubkey, Qprivkey, Qsig: con iota;
 
 pkfiles := array[] of {
 	(Qpubkey, "key"),
@@ -100,6 +101,10 @@ credpkfiles := array[] of {
 
 credskfiles := array[] of {
 	(Qtype, "type")
+};
+
+credsigfiles := array[] of {
+	(Qsig, "sig")
 };
 
 ctlfiles := array[] of {
@@ -394,6 +399,8 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 					srv.reply(styxservers->readstr(m, k.sk.sigalg()));
 			Qissuer =>
 				srv.reply(styxservers->readstr(m, k.cert.issuer.text()));
+			Qsig =>
+				srv.reply(styxservers->readstr(m, k.sig.text()));
 			Qsubject =>
 				srv.reply(styxservers->readstr(m, k.cert.subject.text()));
 			Qtype =>
@@ -401,8 +408,10 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 					srv.reply(styxservers->readstr(m, "cert"));
 				else if(k.pk != nil)
 					srv.reply(styxservers->readstr(m, "public key"));
-				else
+				else if(k.sk != nil)
 					srv.reply(styxservers->readstr(m, "secret key"));
+				else
+					srv.reply(styxservers->readstr(m, "signature"));
 			Qtag =>
 				s: string;
 				pick d := k.cert {
@@ -454,11 +463,13 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 						}
 
 					(toplev, err) := spki->parse(se);
+							sys->fprint(sys->fildes(2), "got seq\n");
 					if(err != nil) {
 						srv.reply(ref Rmsg.Error(m.tag, err));
 						break Case;
 					}
 
+					k: ref Spkikey;
 					pick s := toplev {
 						C =>
 							cert := s.v;
@@ -467,14 +478,14 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 								continue;
 							}
 
-							c := findspkikeyname(name, "cert");
-							if(c != nil) {
+							k = findspkikeyname(name, "cert");
+							if(k != nil) {
 								srv.reply(ref Rmsg.Error(m.tag, 
 										"certificate name already exists"));
 								continue;
 							}
 
-							c = newspkikey(name, toplev, nil);
+							k = newspkikey(name, toplev, nil);
 							writekeys(keyfile);
 						K =>
 							key := s.v;
@@ -483,23 +494,56 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 								continue;
 							}
 
-							k: ref Spkikey;
-						if(key.pk != nil)
-							k = findspkikeyname(name, "pk");
-						if(k != nil) {
-							srv.reply(ref Rmsg.Error(m.tag, "publickey name already exists"));
-							continue;
-						}
+							if(key.pk != nil)
+								k = findspkikeyname(name, "pk");
+							if(k != nil) {
+								srv.reply(ref Rmsg.Error(m.tag, 
+										"publickey name already exists"));
+								continue;
+							}
 
-						if(key.sk != nil)
-							k = findspkikeyname(name, "sk");
-						if(k != nil) {
-							srv.reply(ref Rmsg.Error(m.tag, "secretkey name already exists"));
-							continue;
-						}
+							if(key.sk != nil)
+								k = findspkikeyname(name, "sk");
+							if(k != nil) {
+								srv.reply(ref Rmsg.Error(m.tag, 
+										"secretkey name already exists"));
+								continue;
+							}
 
-						k = newspkikey(name, toplev, nil);
-						writekeys(keyfile);
+							k = newspkikey(name, toplev, nil);
+							writekeys(keyfile);
+						Seq =>
+							seq := s.v;
+							if(seq == nil) {
+								srv.reply(ref Rmsg.Error(m.tag, "bad SPKI sequence"));
+								continue;
+							}
+							
+							for(; seq != nil; seq = tl seq) {
+								pick s := hd seq {
+									C =>
+										k = findspkikeyname(name, "cert");
+										if(k != nil) {
+											srv.reply(ref Rmsg.Error(m.tag, 
+													"certificate name already exists"));
+											continue;
+										}
+
+										k = newspkikey(name, ref Toplev.C(s.c), nil);
+										writekeys(keyfile);
+									S =>
+										k = findspkikeyname(name, "sig");
+										if(k != nil) {
+											srv.reply(ref Rmsg.Error(m.tag,
+												"signature name already exists"));
+											continue;
+										}
+
+										k = newspkikey(name, ref Toplev.Sig(s.sig), nil);
+										writekeys(keyfile);
+								}
+							}
+
 					}
 				}
 			* =>
@@ -706,6 +750,9 @@ findspkikeypath(path: big, spkitype: string): ref Spkikey
 		"cert" =>
 			if(k.cert != nil)
 				return k;
+		"sig" =>
+			if(k.sig != nil)
+				return k;
 		* =>
 			return k;
 	}
@@ -726,6 +773,9 @@ findspkikeyname(name: string, spkitype: string): ref Spkikey
 						return k;
 				"cert" =>
 					if(k.cert != nil)
+						return k;
+				"sig" =>
+					if(k.sig != nil)
 						return k;
 				* =>
 					return k;
@@ -763,12 +813,14 @@ newspkikey(name: string, t: ref Toplev, k: ref Spkikey): ref Spkikey
 	if(k == nil) {
 		pick x := t {
 			C =>
-				k = ref Spkikey(i, name, nil, nil, x.v, path);
+				k = ref Spkikey(i, name, nil, nil, x.v, nil, path);
 			K =>
 				if(x.v.pk != nil)
-					k = ref Spkikey(i, name, x.v, nil, nil, path);
+					k = ref Spkikey(i, name, x.v, nil, nil, nil, path);
 				if(x.v.sk != nil)
-					k = ref Spkikey(i, name, nil, x.v, nil, path);
+					k = ref Spkikey(i, name, nil, x.v, nil, nil, path);
+			Sig =>
+				k = ref Spkikey(i, name, nil, nil, nil, x.v, path);
 		}
 	}
 	else {
@@ -786,19 +838,20 @@ removespkikey(k: ref Spkikey, spkitype: string)
 		case spkitype {
 			"pk" =>
 				k.pk = nil;
-				if(k.sk == nil && k.cert == nil)
-					keys[k.x] = nil;
 			"sk" =>
 				k.sk = nil;
-				if(k.pk == nil && k.cert == nil)
-					keys[k.x] = nil;
 			"cert" =>
 				k.cert = nil;
-				if(k.pk == nil && k.sk == nil)
-					keys[k.x] = nil;
+			"sig" =>
+				k.sig = nil;
 			* =>
-				keys[k.x] = nil;
+				k.pk = k.sk = nil;
+				k.cert = nil;
+				k.sig = nil;
 		}
+
+		if(k.pk == nil && k.sk == nil && k.cert == nil && k.sig == nil)
+			keys[k.x] = nil;
 	}
 }
 
@@ -1068,6 +1121,12 @@ navigator(navops: chan of ref Navop)
 				if(k.sk != nil) {
 					for(j := n.offset; --n.count >= 0 && j < len credskfiles; j++) {
 						(ftype, name) := credskfiles[j];
+						n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, k);
+					}
+				}
+				if(k.sig != nil) {
+					for(j := n.offset; --n.count >= 0 && j < len credsigfiles; j++) {
+						(ftype, name) := credsigfiles[j];
 						n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, k);
 					}
 				}

@@ -815,15 +815,26 @@ Cert.sexp(c: self ref Cert): ref Sexp
 			ds = ref Sexp.List(ref Sexp.String("propagate",nil) :: nil);
 		tag = d.tag;
 	}
-	if(c.valid != nil)
+
+	s: ref Sexp;
+	if(c.valid != nil) {
 		vs := (*c.valid).sexp();
-	s := ref Sexp.List(ref Sexp.String("cert",nil) ::
-		ref Sexp.List(ref Sexp.String("issuer",nil) :: c.issuer.sexp() :: nil) ::
-		c.subject.sexp() ::
-		ds ::
-		tag ::
-		vs ::
-		nil);
+		s = ref Sexp.List(ref Sexp.String("cert",nil) ::
+			ref Sexp.List(ref Sexp.String("issuer",nil) :: c.issuer.sexp() :: nil) ::
+			c.subject.sexp() ::
+			ds ::
+			tag ::
+			vs ::
+			nil);
+	}
+	else {
+		s = ref Sexp.List(ref Sexp.String("cert",nil) ::
+			ref Sexp.List(ref Sexp.String("issuer",nil) :: c.issuer.sexp() :: nil) ::
+			c.subject.sexp() ::
+			ds ::
+			tag ::
+			nil);
+	}
 	return s;
 }
 
