@@ -38,13 +38,14 @@ init(nit: ref Draw->Context, args: list of string)
 	arg := load Arg Arg->PATH;
 	arg->init(args);
 	arg->setusage("speaksfor [-k] -s subject -i issuer [-t tag] [-v valid]" 
-			+ " [-p print cert] [-m keyfs mount point]");
+			+ " [-p print cert] [-m keyfs mount point] [-c cert name for keyfs]");
 	mountpoint := "/mnt/keys";
 	certname: string = nil;
 	subjectname: string = nil;
 	issuername: string = nil;
 	tagstr := "*";
 	infkey := 0;
+	v := 0;
 	printcert := 0;
 
 	while((o := arg->opt()) != 0)
@@ -64,7 +65,7 @@ init(nit: ref Draw->Context, args: list of string)
 		't' =>
 			tagstr = arg->earg();
 		'v' =>
-			;
+			v = 1;
 		* =>
 			arg->usage();
 		}
@@ -116,11 +117,17 @@ init(nit: ref Draw->Context, args: list of string)
 	spkexp := (hd readexpfile(mountpoint + "/pk/" + subjectname + "/key"));
 	
 	# Construct certificate
-	valid := ref Valid("0", "0");
+	valid: ref Valid;
+	if(v) {
+		valid.notbefore = "0";		# TODO: implement valid
+		valid.notafter = "0";
+	}
+	else
+		valid = nil;
 	tag := ref Sexp.List(ref Sexp.String("tag", nil) :: 
 		ref Sexp.List(ref Sexp.String(tagstr, nil) :: nil) ::
 		nil);
-	issuer := ref Name(ikey, nil);
+	issuer := ref Name(ref Key(ikey.pk, nil, ikey.nbits, ikey.halg, ikey.henc, ikey.hash), nil);
 	subject := ref Subject.P(spki->parsekey(spkexp));
 	if(subject.key == nil)
 		error(sys->sprint("can't get subject's public key from file"));
