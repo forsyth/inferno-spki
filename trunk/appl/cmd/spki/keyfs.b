@@ -83,26 +83,32 @@ skfiles := array[] of {
 	(Qalg, "alg")
 };
 
+# Files common to keys, certificates and signatures
+credfiles := array[] of {
+	(Qtype, "type")
+};
+
+# Files specific to certificates
 credcertfiles := array[] of {
 	(Qcert, "cert"),	# whole thing
 	(Qissuer, "issuer"),
 	(Qsubject, "subject"),
-	(Qtype, "type"),
 	(Qtag, "tag"),
 	(Qvalidity, "valid"),
 	(Qtransport, "transport"),      # whole thing in transport format
 	(Qsigned, "signed")
 };
 
+# Files specific to public keys
 credpkfiles := array[] of {
-	(Qpubkey, "pubkey"),
-	(Qtype, "type")
+	(Qpubkey, "pubkey")
 };
 
-credskfiles := array[] of {
-	(Qtype, "type")
-};
+# Files specific to private keys - none right now as we can't show the key itself here
+#credskfiles := array[] of {
+#};
 
+# Files specific to signatures
 credsigfiles := array[] of {
 	(Qsig, "sig")
 };
@@ -404,14 +410,16 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 			Qsubject =>
 				srv.reply(styxservers->readstr(m, k.cert.subject.text()));
 			Qtype =>
+				s: string = "";
 				if(k.cert != nil)
-					srv.reply(styxservers->readstr(m, "cert"));
-				else if(k.pk != nil)
-					srv.reply(styxservers->readstr(m, "public key"));
-				else if(k.sk != nil)
-					srv.reply(styxservers->readstr(m, "secret key"));
-				else
-					srv.reply(styxservers->readstr(m, "signature"));
+					s += "cert\n";
+				if(k.pk != nil)
+					s += "public key\n";
+				if(k.sk != nil)
+					s += "private key\n";
+				if(k.sig != nil)
+					s += "signature\n";
+				srv.reply(styxservers->readstr(m, s));
 			Qtag =>
 				s: string;
 				pick d := k.cert {
@@ -457,13 +465,12 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 					se: ref Sexp;
 					msg: string;
 					(se, t, msg) = Sexp.parse(t);
-						if(msg != nil) {
-							srv.reply(ref Rmsg.Error(m.tag, msg));
-							break Case;
-						}
+					if(msg != nil) {
+						srv.reply(ref Rmsg.Error(m.tag, msg));
+						break Case;
+					}
 
 					(toplev, err) := spki->parse(se);
-							sys->fprint(sys->fildes(2), "got seq\n");
 					if(err != nil) {
 						srv.reply(ref Rmsg.Error(m.tag, err));
 						break Case;
@@ -799,6 +806,8 @@ newspkikey(name: string, t: ref Toplev, k: ref Spkikey): ref Spkikey
 						knew.pk = key;
 					if(key.sk != nil)
 						knew.sk = key;
+				Sig =>
+					knew.sig = s.v;
 			}
 			return knew;
 		}
@@ -1010,6 +1019,13 @@ navigator(navops: chan of ref Navop)
 					break;
 				}
 
+				for(j := 0; j < len credfiles; j++) {
+					(ftype, name) := credfiles[j];
+					if(n.name == name) {
+						n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, nil);
+						break Pick;
+					}
+				}
 				if(k.cert != nil) {
 					for(j := 0; j < len credcertfiles; j++) {
 						(ftype, name) := credcertfiles[j];
@@ -1030,8 +1046,17 @@ navigator(navops: chan of ref Navop)
 				}
 
 				if(k.sk != nil) {
-					for(j := 0; j < len credskfiles; j++) {
-						(ftype, name) := credskfiles[j];
+					#for(j := 0; j < len credskfiles; j++) {
+					#	(ftype, name) := credskfiles[j];
+					#	if(n.name == name) {
+					#		n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, nil);
+					#		break Pick;
+					#	}
+					#}
+				}
+				if(k.sig != nil) {
+					for(j := 0; j < len credsigfiles; j++) {
+						(ftype, name) := credsigfiles[j];
 						if(n.name == name) {
 							n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, nil);
 							break Pick;
@@ -1105,7 +1130,10 @@ navigator(navops: chan of ref Navop)
 					n.reply <-= (nil, Eremoved);
 					break;
 				}
-
+				for(j := n.offset; --n.count >= 0 && j < len credfiles; j++) {
+					(ftype, name) := credfiles[j];
+					n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, k);
+				}
 				if(k.cert != nil) {
 					for(j := n.offset; --n.count >= 0 && j < len credcertfiles; j++) {
 						(ftype, name) := credcertfiles[j];
@@ -1119,10 +1147,10 @@ navigator(navops: chan of ref Navop)
 					}
 				}
 				if(k.sk != nil) {
-					for(j := n.offset; --n.count >= 0 && j < len credskfiles; j++) {
-						(ftype, name) := credskfiles[j];
-						n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, k);
-					}
+					#for(j := n.offset; --n.count >= 0 && j < len credskfiles; j++) {
+					#	(ftype, name) := credskfiles[j];
+					#	n.reply <-= dirgen((n.path & ~big 16r1F) | big ftype, name, k);
+					#}
 				}
 				if(k.sig != nil) {
 					for(j := n.offset; --n.count >= 0 && j < len credsigfiles; j++) {
