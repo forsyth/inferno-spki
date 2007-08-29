@@ -51,6 +51,9 @@ include "styxservers.m";
 	Fid, Styxserver, Navigator, Navop: import styxservers;
 	Enotfound, Eperm, Ebadarg, Edot: import styxservers;
 
+include "reduce.m";
+	red: Reduce;
+
 include "arg.m";
 
 Keyfs: module
@@ -71,7 +74,7 @@ Spkikey: adt
 
 Qroot, Qnew, Qpk, Qsk, Qcred, Qpkname, Qskname, Qcredname, 
 	Qalg, Qcert, Qissuer, Qsubject, Qtype, Qtag, Qtransport, 
-	Qvalidity, Qsigned, Qpubkey, Qprivkey, Qsig: con iota;
+	Qvalidity, Qsigned, Qpubkey, Qprivkey, Qsig, Qquery: con iota;
 
 pkfiles := array[] of {
 	(Qpubkey, "key"),
@@ -114,7 +117,8 @@ credsigfiles := array[] of {
 };
 
 ctlfiles := array[] of {
-	(Qnew, "new")
+	(Qnew, "new"),
+	(Qquery, "query")
 };
 
 dirs := array[] of {
@@ -176,9 +180,13 @@ init(nil: ref Draw->Context, args: list of string)
 	spki = load SPKI SPKI->PATH;
 	if(spki == nil)
 		nomod(SPKI->PATH);
+	red = load Reduce Reduce->PATH;
+	if(red == nil)
+		nomod(Reduce->PATH);
 
 	sexprs->init();
 	spki->init();
+	red->init();
 
 	styx->init();
 	styxservers->init(styx);
@@ -390,7 +398,7 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 				break;
 			}
 			case TYPE(c.path) {
-			Qnew =>
+			Qnew or Qquery =>
 				srv.reply(styxservers->readstr(m, nil));
 			Qpubkey =>
 				srv.reply(styxservers->readstr(m, k.pk.text()));
@@ -552,6 +560,111 @@ serveloop(tchan: chan of ref Tmsg, srv: ref Styxserver, pidc: chan of int, navop
 							}
 
 					}
+				}
+			Qquery =>
+				f := bufio->aopen(m.data);
+				while((line := f.gets('\n')) != nil) {
+
+					(nf, flds) := sys->tokenize(line, "\n \t");
+					if(nf <= 0 || (hd flds)[0] == '#')
+						continue;
+
+					if(hd flds == "?") {
+
+						flds = tl flds;
+						if(flds == nil)
+							continue;
+						k0 := findspkikeyname(hd flds, "pk");
+						if(k0 == nil){
+							sys->fprint(sys->fildes(2), "%s: unknown name\n", hd flds);
+							continue;
+						}
+						k0str := k0.pk.text();
+
+						n0 := 0;
+						while((flds = tl flds) != nil) {
+							k0str += " "+hd flds;
+							n0 = 1;
+						}
+						if(n0)
+							k0str = "(name "+ k0str +")";
+
+						(e, nil, diag) := Sexp.parse(k0str);
+						if(e == nil) {
+							sys->fprint(sys->fildes(2), "invalid expression: %q: %s\n", 
+								k0str, diag);
+							continue;
+						}
+						(qs, err) := red->query(e);
+						if(err != nil) {
+							sys->fprint(sys->fildes(2), "query error: %s\n", err);
+							continue;
+						}
+						# For now, just print the results
+						sys->print("%s", qs);
+						continue;
+					}
+
+					for(l := flds; l != nil; l = tl l)
+						if(hd l == "<-")
+							break;
+					if(l == nil) {
+						sys->fprint(sys->fildes(2), "%s: bad map\n", line);
+						continue;
+					}
+
+					n0 := 0;
+					n1 := 0;
+					k0 := findspkikeyname(hd flds, "pk");
+					if(k0 == nil) {
+						sys->fprint(sys->fildes(2), "%s: unknown name\n", hd flds);
+						continue;
+					}
+					k0str := k0.pk.text();
+
+					while((flds = tl flds) != l){
+						k0str += " " + hd flds;
+						n0 = 1;
+					}
+
+					l = tl l;
+					if(l == nil) {
+						sys->fprint(sys->fildes(2), "%s: bad entry\n", line);
+						continue;
+					}
+					k1 := findspkikeyname(hd l, "pk");
+					if(k1 == nil) {
+						sys->fprint(sys->fildes(2), "%s: unknown name\n", hd l);
+						continue;
+					}
+					k1str := k1.pk.text();
+
+					while((l = tl l) != nil) {
+						k1str += " " + hd l;
+						n1 = 1;
+					}
+
+					if(n0)
+						k0str = "(name " + k0str + ")";
+					if(n1)
+						k1str = "(name " + k1str + ")";
+
+					s := "(cert (issuer " + k0str +") (subject " + k1str +"))";
+
+					(e, nil, err) := Sexp.parse(s);
+					if(err != nil) {
+						sys->fprint(sys->fildes(2), "invalid s-expression %q: %s\n", s, err);
+						continue;
+					}
+
+					(top, diag) := spki->parse(e);
+					if(diag != nil) {
+						sys->fprint(sys->fildes(2), "invalid spki structure: %s\n", diag);
+						continue;
+					}
+					recerr := red->record(top);
+					if(recerr != nil)
+						sys->fprint(sys->fildes(2), "%s\n", recerr);
 				}
 			* =>
 				srv.reply(ref Rmsg.Error(m.tag, Eperm));
