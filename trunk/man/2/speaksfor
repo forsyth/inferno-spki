@@ -12,7 +12,13 @@ chain
 .B -t tag
 ] 
 [
-.B -v validity
+.B -b not valid before -a not valid after
+]
+[
+.B -m keyfs mount point
+]
+[
+.B -c certificate name used for keyfs
 ]
 .SH DESCRIPTION
 .I Speaksfor
@@ -46,7 +52,8 @@ By default, the subject may speak for the issuer regarding everything.
 .TP
 .B validity
 Optional validity of the certificate, represented as not-before and not-after
-times.
+dates in the format YYYY-MM-DD_HH:MM:SS. Currently both dates are required when
+specifying the validity.
 .PD
 .PP
 .SH SOURCE

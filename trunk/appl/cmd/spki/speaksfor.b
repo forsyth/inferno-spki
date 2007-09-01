@@ -37,8 +37,9 @@ init(nit: ref Draw->Context, args: list of string)
 
 	arg := load Arg Arg->PATH;
 	arg->init(args);
-	arg->setusage("speaksfor [-k] -s subject -i issuer [-t tag] [-v valid]" 
-			+ " [-p print cert] [-m keyfs mount point] [-c cert name for keyfs]");
+	arg->setusage("speaksfor [-k] -s subject -i issuer [-t tag] [-b notbefore date]"
+			+ " [-a notafter date] [-m keyfs mount point] [-c cert name for keyfs]"
+			+ "[-p]");
 	mountpoint := "/mnt/keys";
 	certname: string = nil;
 	subjectname: string = nil;
@@ -46,6 +47,8 @@ init(nit: ref Draw->Context, args: list of string)
 	tagstr := "*";
 	infkey := 0;
 	v := 0;
+	notbefore:string = nil;
+	notafter:string = nil;
 	printcert := 0;
 
 	while((o := arg->opt()) != 0)
@@ -64,8 +67,12 @@ init(nit: ref Draw->Context, args: list of string)
 			subjectname = arg->earg();
 		't' =>
 			tagstr = arg->earg();
-		'v' =>
+		'b' =>
 			v = 1;
+			notbefore = arg->earg();
+		'a' =>
+			v = 1;
+			notafter = arg->earg();
 		* =>
 			arg->usage();
 		}
@@ -75,6 +82,9 @@ init(nit: ref Draw->Context, args: list of string)
 
 	if(certname == nil)
 		certname = subjectname;
+	
+	if(notafter != nil && notbefore == nil || notbefore != nil && notafter == nil)
+		error(sys->sprint("both not-before and not-after dates are required"));
 	
 	args = arg->argv();
 	if(args != nil)
@@ -118,10 +128,8 @@ init(nit: ref Draw->Context, args: list of string)
 	
 	# Construct certificate
 	valid: ref Valid;
-	if(v) {
-		valid.notbefore = "0";		# TODO: implement valid
-		valid.notafter = "0";
-	}
+	if(v)
+		valid = ref Valid(notbefore, notafter);
 	else
 		valid = nil;
 	tag := ref Sexp.List(ref Sexp.String("tag", nil) :: 
