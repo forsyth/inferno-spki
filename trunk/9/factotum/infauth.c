@@ -92,10 +92,9 @@ static char*	phasenames[Maxphase] =
 	[CReadErr] "CReadErr",
 };
 
-
 static Certificate*	sign(InfPrivateKey*, int, uchar*, int);
 static int	verify(InfPublicKey*, Certificate*, char*, int);
-static int	rsaverify(mpint*, mpint*, RSApub*);
+static int	infrsaverify(mpint*, mpint*, RSApub*);
 static char*	pktostr(InfPublicKey*);
 static void	pkfree(InfPublicKey*);
 static char*	certtostr(Certificate*);
@@ -211,10 +210,14 @@ infauthwrite(Fsstate *fss, void *va, uint n)
 		r = strlen("remote: ");
 		if(i >= ERRMAX-r)
 			i = ERRMAX-r-1;
-		strcpy(s->rerr, "remote: ");
-		memmove(s->rerr+r, a+5, i);
+		a += 5;
+		if(i >= r && strncmp(a, "remote: ", r) == 0)	/* old implementation sent it */
+			r = 0;
+		else
+			strcpy(s->rerr, "remote: ");
+		memmove(s->rerr+r, a, i);
 		s->rerr[r+i] = 0;
-		return seterr(fss, "missing your authentication data");
+		return seterr(fss, "failed");	/* acknowledge the error */
 	}
 	a += 5;
 	n = i;
@@ -261,6 +264,7 @@ infauthwrite(Fsstate *fss, void *va, uint n)
 		i = mptob64z(s->alphar1, alphabuf, MAXMSG);
 		i += mptob64z(s->alphar0, alphabuf + i, MAXMSG - i);
 		r = verify(s->hispk, alphacert, alphabuf, i);
+		memset(alphabuf, 0, i);
 		free(alphabuf);
 		certfree(alphacert);
 		if(r == 0)
@@ -292,12 +296,13 @@ infauthwrite(Fsstate *fss, void *va, uint n)
 		}
 		i = mptobe(s->alphar0r1, nil, MAXMSG, &fss->ai.secret);
 		if(i < 0)
-			return failure(fss, "can't convert mp int to secret");
+			return failure(fss, "internal: can't create secret");
 		fss->ai.nsecret = i;
 		fss->haveai = 1;
 		fss->ai.suid = s->hispk->owner;
 		fss->ai.cuid = s->info->mypk->owner;
 		fss->phase = Established;
+		/* TO DO: add cap when appropriate */
 		return RpcOk;
 	default:
 		return phaseerror(fss, "write");
@@ -360,6 +365,7 @@ infauthread(Fsstate *fss, void *va, uint *n)
 		i += mptob64z(s->alphar1, alphabuf + i, MAXMSG - i);
 
 		alphacert = sign(s->info->mysk, 0, (uchar*)alphabuf, i);
+		memset(alphabuf, 0, i);
 		free(alphabuf);
 
 		alphabuf = certtostr(alphacert);
@@ -394,11 +400,13 @@ seterr(Fsstate *fss, char *f, ...)
 	va_list ap;
 	State *s;
 
-	va_start(ap, f);
-	vsnprint(fss->err, sizeof(fss->err), f, ap);
-	va_end(ap);
 	s = fss->ps;
-	s->failed = 1;
+	if(!s->failed){
+		va_start(ap, f);
+		vsnprint(fss->err, sizeof(fss->err), f, ap);
+		va_end(ap);
+		s->failed = 1;
+	}
 	if(s->rerr[0])
 		fss->phase = CReadErr;	/* force error to this side after ack */
 	else
@@ -480,13 +488,13 @@ verify(InfPublicKey *pk, Certificate *cert, char *a, int len)
 	b = betomp(digest, SHA1dlen, nil);
 	if(b == nil)
 		return 0;
-	n = rsaverify(b, cert->sig, pk->pk);
+	n = infrsaverify(b, cert->sig, pk->pk);
 	mpfree(b);
 	return n;
 }
 
 static int
-rsaverify(mpint *m, mpint *sig, RSApub *key)
+infrsaverify(mpint *m, mpint *sig, RSApub *key)
 {
 	mpint *t;
 	int v;

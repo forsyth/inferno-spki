@@ -12,7 +12,6 @@ typedef struct InfPrivateKey InfPrivateKey;
 typedef struct Certificate Certificate;
 typedef struct Authinfo Authinfo;
 
-
 struct InfPublicKey {
 	RSApub*	pk;
 	char*	owner;
@@ -59,7 +58,7 @@ static int	mptob64z(mpint*, char*, int);
 static int	readmsg(Conv*, char**);
 static int	sendstrfree(Conv*, char*);
 static int	sendstr(Conv*, char*);
-static int	senderr(Conv *, char*, ...);
+static void	senderr(Conv *, char*, ...);
 #pragma varargck	argpos senderr 2
 
 static int
@@ -73,11 +72,10 @@ infauthclient(Conv *c)
 	mpint *p, *r0, *alphar0, *alphar1, *alphar0r1;
 	char *buf, *alphabuf;
 	uchar *cvb;
-	int ret, n, rerror;
+	int ret, n;
 	long now;
 
 	k = nil;
-	attr = nil;
 	alphar0 = alphar1 = alphar0r1 = r0 = p = nil;
 	hiscert = nil;
 	alphacert = nil;
@@ -85,12 +83,14 @@ infauthclient(Conv *c)
 	info = nil;
 	alphabuf = emalloc(MAXMSG);
 	buf = nil;
-	rerror = 0;
 
 	c->state = "find key";
+	attr = delattr(copyattr(c->attr), "role");
 	k = keyfetch(c, "%A %s", attr, c->proto->keyprompt);
+	freeattr(attr);
 	if(k == nil)
 		return -1;
+	c->attr = addattrs(c->attr, k->attr);
 
 	ret = -1;
 
@@ -100,13 +100,12 @@ infauthclient(Conv *c)
 		goto Stop;
 
 	c->state = "read version";
-	if(readmsg(c, &buf) < 0){
-		rerror = 1;
-		goto Flush;
-	}
+	if(readmsg(c, &buf) < 0)
+		goto Stop;
+
 	if(atoi(buf) != 1){
 		senderr(c, "incompatible authentication protocol");
-		goto Flush;
+		goto Stop;
 	}
 
 	r0 = mpnew(0);
@@ -130,51 +129,45 @@ infauthclient(Conv *c)
 		goto Stop;
 
 	c->state = "read alphar1";
-	if(readmsg(c, &buf) < 0){
-		rerror = 1;
-		goto Flush;
-	}
+	if(readmsg(c, &buf) < 0)
+		goto Stop;
 
 	alphar1 = strtomp(buf, nil, 64, nil);
 	/* check below that alphar1 is in range, after cert check */
 	if(mpcmp(alphar0, alphar1) == 0){
 		senderr(c, "possible replay attack");
-		goto Flush;
+		goto Stop;
 	}
 
 	c->state = "read cert";
-	if(readmsg(c, &buf) < 0){
-		rerror = 1;
-		goto Flush;
-	}
+	if(readmsg(c, &buf) < 0)
+		goto Stop;
 
 	hiscert = strtocert(buf);
 	if(hiscert == nil){
 		senderr(c, "bad certificate syntax");
-		goto Flush;
+		goto Stop;
 	}
 
 	c->state = "read pk";
-	if(readmsg(c, &buf) < 0){
-		rerror = 1;
-		goto Flush;
-	}
+	if(readmsg(c, &buf) < 0)
+		goto Stop;
 
 	hispk = strtopk(buf);
 	if(hispk == nil){
 		senderr(c, "bad public key syntax");
-		goto Flush;
+		goto Stop;
 	}
 
 	if(verify(info->spk, hiscert, buf, strlen(buf)) == 0){
 		senderr(c, "pk doesn't match certificate");
-		goto Flush;
+		goto Stop;
 	}
 
 	now = time(nil);
 	if(hiscert->exp != 0 && hiscert->exp <= now){
 		senderr(c, "certificate expired");
-		goto Flush;
+		goto Stop;
 	}
 
 	c->state = "write alpha cert";
@@ -187,47 +180,52 @@ infauthclient(Conv *c)
 		goto Stop;
 
 	c->state = "read alpha cert";
-	if(readmsg(c, &buf) < 0){
-		rerror = 1;
-		goto Flush;
-	}
+	if(readmsg(c, &buf) < 0)
+		goto Stop;
 	certfree(alphacert);
 	alphacert = strtocert(buf);
 	if(alphacert == nil){
 		senderr(c, "bad certificate syntax");
-		goto Flush;
+		goto Stop;
 	}
 
 	n = mptob64z(alphar1, alphabuf, MAXMSG);
 	n += mptob64z(alphar0, alphabuf + n, MAXMSG - n);
 	if(!verify(hispk, alphacert, alphabuf, n)){
 		senderr(c, "signature did not match pk");
-		goto Flush;
+		goto Stop;
 	}
 
 	if(mpcmp(info->p, alphar1) <= 0){
 		senderr(c, "implausible parameter value");
-		goto Flush;
+		goto Stop;
 	}
 
 	mpexp(alphar1, r0, info->p, alphar0r1);
 	n = mptobe(alphar0r1, nil, MAXMSG, &cvb);
-	c->attr = addattr(c->attr, "secret=%.8H", cvb);
+	if(n < 0){
+		senderr(c, "internal: can't convert secret");
+		goto Stop;
+	}
+	c->attr = addattr(c->attr, "secret=%.*H", n, cvb);
+	if(debug)
+		fprint(2, "secret=%.*H\n", n, cvb);
 	free(cvb);
 	c->attr = addattr(c->attr, "cuid=%q", info->mypk->owner);	/* TO DO: which names to use? */
 	c->attr = addattr(c->attr, "suid=%q", hispk->owner);
 	c->attr = addattr(c->attr, "cap=''");	/* TO DO */
+	if(debug)
+		fprint(2, "attrs: %A\n", c->attr);
 
 	c->state = "write response";
 	sendstr(c, "OK");
 
-Flush:
 	c->state = "read response";
-	if(!rerror){
-		while(readmsg(c, &buf) >= 0 && strcmp(buf, "OK") != 0){
-			/* skip */
+	while(readmsg(c, &buf) >= 0){
+		if(strcmp(buf, "OK") == 0){
+			ret = 0;
+			break;
 		}
-		ret = 0;
 	}
 
 Stop:
@@ -278,20 +276,26 @@ infauthclosekey(Key *k)
 
 	info = k->priv;
 	infofree(info);
-}	
+}
 
-static int
+static void
 senderr(Conv *c, char *f, ...)
 {
 	va_list ap;
-	char err[ERRMAX];
+	char err[ERRMAX], *buf;
 
 	va_start(ap, f);
 	vsnprint(err, sizeof(err), f, ap);
 	va_end(ap);
 	convprint(c, "!%.3d\n%s", strlen(err), err);
+	buf = nil;
+	while(readmsg(c, &buf) >= 0){
+		/* flush until OK or an error; we don't care which */
+		if(strcmp(buf, "OK") == 0)
+			break;
+	}
+	free(buf);
 	errstr(err, sizeof(err));
-	return -1;
 }
 
 static int
@@ -314,7 +318,7 @@ sendstr(Conv *c, char *s)
 static int
 readmsg(Conv *c, char **x)
 {
-	char hdr[6];
+	char hdr[6], *p;
 	int i;
 
 	free(*x);
@@ -335,9 +339,15 @@ readmsg(Conv *c, char **x)
 		return -1;
 	(*x)[i] = 0;
 	if(hdr[0] == '!'){
-		senderr(c, "missing your authentication data");	/* it's an old convention */
-		werrstr("remote: %s", *x);
+		/* acknowledge the error */
+		p = "failed";
+		convprint(c, "!%.3d\n%s", strlen(p), p);
+		if(strncmp(*x, "remote: ", 8) == 0)	/* old implementation sent it */
+			werrstr("%s", *x+8);
+		else
+			werrstr("remote: %s", *x);
 		free(*x);
+		*x = nil;
 		return -1;
 	}
 	return 0;
